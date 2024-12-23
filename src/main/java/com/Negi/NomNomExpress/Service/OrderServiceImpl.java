@@ -13,10 +13,13 @@ import org.springframework.stereotype.Component;
 import com.Negi.NomNomExpress.DTO.CancelOrderDTO;
 import com.Negi.NomNomExpress.DTO.CartDTO;
 import com.Negi.NomNomExpress.DTO.CartItemDTO;
+import com.Negi.NomNomExpress.DTO.OrderDTO;
 import com.Negi.NomNomExpress.DTO.PlaceOrderDTO;
 import com.Negi.NomNomExpress.Entity.*;
 import com.Negi.NomNomExpress.Exception.RESTException;
 import com.Negi.NomNomExpress.Repository.*;
+import com.Negi.NomNomExpress.kafka.KafkaProducerService;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 @Component
 public class OrderServiceImpl implements OrderService {
@@ -33,8 +36,13 @@ public class OrderServiceImpl implements OrderService {
 	@Autowired
 	private OrderRepository orderRepo;
 	
+	@Autowired
+	private KafkaProducerService kafkaService;
+	
+	ObjectMapper objectMapper = new ObjectMapper();
+	
 	@Override
-	public Cart addToCart(@Valid CartItemDTO cartItemDTO) throws RESTException{
+ 	public Cart addToCart(@Valid CartItemDTO cartItemDTO) throws RESTException{
 		try {
 			Optional<UserEntity> user = userRepo.findById(cartItemDTO.getUserId());
 			
@@ -229,8 +237,9 @@ public class OrderServiceImpl implements OrderService {
 						.map(cartItem -> new OrderItem(cartItem, savedOrder)).collect(Collectors.toList());
 				
 				savedOrder.setItems(orderItems);
-				
-				return orderRepo.save(savedOrder);
+				Order finalOrder = orderRepo.save(savedOrder);
+				kafkaService.sendMessage(objectMapper.writeValueAsString(new OrderDTO(finalOrder)));
+				return finalOrder;
 			}
 		}catch(RESTException e) {
 			throw e;
